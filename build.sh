@@ -1,223 +1,124 @@
-
 #!/bin/bash
-#
-# Script For Building Android arm64 Kernel
-#
-# Copyright (C) 2021-2023 itsshashanksp <9945shashank@gmail.com>
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
 
-# Setup colour for the script
+set -e
+
+# ===== COLORS =====
+green='\033[0;32m'
+red='\033[0;31m'
 yellow='\033[0;33m'
 white='\033[0m'
-red='\033[0;31m'
-green='\e[0;32m'
-
-# Deleting out "kernel complied" and zip "anykernel" from an old compilation
-echo -e "$green << cleanup >> \n $white"
-
-rm -rf out
-rm -rf zip
-rm -rf error.log
-
-# Now u can chose which things need to be modified
-#
-# DEVICE = your device codename
-# KERNEL_NAME = the name of ur kranul
-#
-# DEFCONFIG = defconfig that will be used to compile the kernel
-#
-# AnyKernel = the url of your modified anykernel script
-# AnyKernelbranch = the branch of your modified anykernel script
-#
-# HOSST = build host
-# USEER = build user
-#
-
-# Devices
-if [ "$DEVICE_TYPE" == courbet  ];
-then
-DEVICE="XIAOMI 11 LITE (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="COURBET"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/courbet.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="courbet"
-fi
-
-if [ "$DEVICE_TYPE" == davinci  ];
-then
-DEVICE="REDMI K20 (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="DAVINCI"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/davinci.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="davinci"
-fi
-
-if [ "$DEVICE_TYPE" == phoenix  ];
-then
-DEVICE="REDMI K30 & POCO X2 (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="PHOENIX"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/phoenix.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="phoenix"
-fi
-
-if [ "$DEVICE_TYPE" == sweet  ];
-then
-DEVICE="REDMI NOTE 10 PRO (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="SWEET"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/sweet.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="master"
-fi
-
-if [ "$DEVICE_TYPE" == sweetk6a  ];
-then
-DEVICE="REDMI NOTE 12 PRO 4G (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="SWEET-K6A"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/sweetk6a.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="sweetk6a"
-fi
-
-if [ "$DEVICE_TYPE" == violet  ];
-then
-DEVICE="REDMI NOTE 7 PRO (OSS)"
-KERNEL_NAME="SLEEPY_KERNEL-OSS"
-CODENAME="violet"
-
-DEFCONFIG_COMMON="vendor/sdmsteppe-perf_defconfig"
-DEFCONFIG_DEVICE="vendor/violet.config"
-
-AnyKernel="https://github.com/itsshashanksp/AnyKernel3.git"
-AnyKernelbranch="violet"
-fi
-
-# Kernel build release tag
-KRNL_REL_TAG="$KERNEL_TAG"
-
-HOSST="sleeping-bag"
-USEER="itsshashanksp"
-
-# setup telegram env
-export BOT_MSG_URL="https://api.telegram.org/bot$API_BOT/sendMessage"
-export BOT_BUILD_URL="https://api.telegram.org/bot$API_BOT/sendDocument"
 
 
+# ===== DEVICE CONFIG =====
+DEVICE_TYPE=${DEVICE_TYPE:-davinci}
 
-# clang stuff
-		echo -e "$green << cloning clang >> \n $white"
-		git clone --depth=1 https://gitlab.com/itsshashanksp/android_prebuilts_clang_host_linux-x86_clang-r547379.git "$HOME"/clang
+case $DEVICE_TYPE in
+  davinci)
+    DEVICE="Redmi K20"
+    CODENAME="davinci"
+    DEFCONFIG="vendor/davinci_a16_defconfig"
+    ;;
+  raphael)
+    DEVICE="Redmi K20 Pro"
+    CODENAME="raphael"
+    DEFCONFIG="vendor/raphael_defconfig"
+    ;;
+  *)
+    echo -e "${red}Unknown device${white}"
+    exit 1
+    ;;
+esac
 
-	export PATH="$HOME/clang/bin:$PATH"
-	export KBUILD_COMPILER_STRING=$("$HOME"/clang/bin/clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')
+# ===== BUILD INFO =====
+KERNEL_NAME="NitroKernel"
+DATE=$(date +"%Y%m%d-%H%M")
+OUT_DIR=out
 
-# Setup build process
+# ===== CLEAN =====
+echo -e "${green}==> Cleaning${white}"
+rm -rf $OUT_DIR error.log fake_include
+mkdir -p $OUT_DIR
 
-build_kernel() {
-Start=$(date +"%s")
+# ===== ENV =====
+echo -e "${green}==> Setting environment${white}"
 
-	make -j$(nproc --all) O=out \
-                              ARCH=arm64 \
-                              LLVM=1 \
-                              LLVM_IAS=1 \
-                              AR=llvm-ar \
-                              NM=llvm-nm \
-                              LD=ld.lld \
-                              OBJCOPY=llvm-objcopy \
-                              OBJDUMP=llvm-objdump \
-                              STRIP=llvm-strip \
-                              CC=clang \
-                              CLANG_TRIPLE=aarch64-linux-gnu- \
-                              CROSS_COMPILE=aarch64-linux-android- \
-                              CROSS_COMPILE_ARM32=arm-linux-androideabi-  2>&1 | tee error.log
-
-End=$(date +"%s")
-Diff=$(($End - $Start))
-}
-
-# Let's start
-echo -e "$green << doing pre-compilation process >> \n $white"
 export ARCH=arm64
 export SUBARCH=arm64
-export HEADER_ARCH=arm64
 
-export KBUILD_BUILD_HOST="$HOSST"
-export KBUILD_BUILD_USER="$USEER"
+# Оптимизации для скорости
+export CC="clang"
+export LD="ld.lld"
+export LLVM=1
+export LLVM_IAS=1
 
-mkdir -p out
+# Кросс-компиляция
+export CROSS_COMPILE="aarch64-linux-android-"
+export CROSS_COMPILE_ARM32="arm-linux-androideabi-"
+export CLANG_TRIPLE="aarch64-linux-gnu-"
 
-make clean && make mrproper
-make "$DEFCONFIG_COMMON" O=out
-make "$DEFCONFIG_DEVICE" O=out
+# Ускорение компиляции
+export HOSTCFLAGS="-O2 -pipe"
+export HOSTCXXFLAGS="-O2 -pipe"
+export RUSTFLAGS="-C opt-level=2"
 
-echo -e "$yellow << compiling the kernel >> \n $white"
+# Параллельная линковка (быстрее)
+export LDFLAGS="-Wl,--threads -Wl,--thread-count=$(nproc)"
 
+# Используем ccache если доступен (кеширует компиляцию)
+if command -v ccache &> /dev/null; then
+    export CC="ccache clang"
+    export LD="ccache ld.lld"
+    echo -e "${green}ccache enabled - second builds will be faster${white}"
+fi
 
-build_kernel || error=true
+export KBUILD_BUILD_USER="nitro"
+export KBUILD_BUILD_HOST="bazzite"
 
-DATE=$(date +"%Y%m%d-%H%M%S")
-KERVER=$(make kernelversion)
+# ===== CHECK CLANG =====
+echo -e "${green}==> Checking clang${white}"
+clang --version || { echo -e "${red}clang not found${white}"; exit 1; }
 
-export IMG="$PWD"/out/arch/arm64/boot/Image.gz
-export dtbo="$PWD"/out/arch/arm64/boot/dtbo.img
-export dtb="$PWD"/out/arch/arm64/boot/dtb.img 
+# ===== DEFCONFIG =====
+echo -e "${green}==> Loading defconfig (${DEFCONFIG})${white}"
+make O=$OUT_DIR $DEFCONFIG
 
-        if [ -f "$IMG" ]; then
-                echo -e "$green << Build completed in $(($Diff / 60)) minutes and $(($Diff % 60)) seconds >> \n $white"
-        else
-                echo -e "$red << Failed to compile the kernel , Check up to find the error >>$white"
+# ===== BUILD =====
+echo -e "${yellow}==> Building kernel${white}"
 
-                exit 1
-        fi
+START=$(date +"%s")
 
-        if [ -f "$IMG" ]; then
-                echo -e "$green << cloning AnyKernel from your repo >> \n $white"
-                git clone --depth=1 "$AnyKernel" --single-branch -b "$AnyKernelbranch" zip
-                echo -e "$yellow << making kernel zip >> \n $white"
-                cp -r "$IMG" zip/
-                cp -r "$dtbo" zip/
-                cp -r "$dtb" zip/
-                cd zip
-                export ZIP="$KERNEL_NAME"-"$KRNL_REL_TAG"-"$CODENAME"
-                zip -r9 "$ZIP" * -x .git README.md LICENSE *placeholder
-                curl -sLo zipsigner-3.0.jar https://gitlab.com/itsshashanksp/zipsigner/-/raw/master/bin/zipsigner-3.0-dexed.jar
-                java -jar zipsigner-3.0.jar "$ZIP".zip "$ZIP"-signed.zip
-                tg_post_msg "Kernel successfully compiled uploading ZIP" "$CHATID"
-                tg_post_build "$ZIP"-signed.zip "$CHATID"
-                tg_post_msg "done" "$CHATID"
-                cd ..
-                
-                exit
-        fi
+make -j$(nproc) O=$OUT_DIR \
+    CC=clang \
+    LD=ld.lld \
+    LLVM=1 \
+    LLVM_IAS=1 \
+    HOSTCFLAGS="$HOSTCFLAGS" \
+    Image.gz dtbs dtbo.img 2>&1 | tee error.log
+
+END=$(date +"%s")
+DIFF=$((END - START))
+
+# ===== CHECK =====
+IMG="$OUT_DIR/arch/arm64/boot/Image.gz"
+
+if [ ! -f "$IMG" ]; then
+    echo -e "${red}Build failed${white}"
+    exit 1
+fi
+
+echo -e "${green}Build success in $((DIFF / 60))m $((DIFF % 60))s${white}"
+
+# ===== OPTIONAL PACK =====
+echo -e "${green}==> Preparing zip${white}"
+
+rm -rf zip
+git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zip
+
+cp $IMG zip/
+cp $OUT_DIR/arch/arm64/boot/dtbo.img zip/ 2>/dev/null || true
+
+cd zip
+ZIP_NAME="${KERNEL_NAME}-${CODENAME}-${DATE}.zip"
+zip -r9 $ZIP_NAME * -x .git README.md
+
+echo -e "${green}ZIP created: zip/$ZIP_NAME${white}"

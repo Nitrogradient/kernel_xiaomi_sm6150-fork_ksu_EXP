@@ -222,6 +222,6 @@ msm_drm-$(CONFIG_DRM_MSM) += \
 	msm_prop.o \
 	msm_fence.o \
 	msm_debugfs.o
-
+obj-y += xiaomi_frame_stat.o
 obj-$(CONFIG_DRM_MSM)	+= msm_drm.o
 

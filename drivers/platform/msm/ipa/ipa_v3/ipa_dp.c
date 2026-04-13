@@ -9,8 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#define ipa3_inc_acquire_wakelock(...)
-#define ipa3_dec_release_wakelock(...)
+static inline void ipa3_inc_acquire_wakelock(void) {}
+static inline void ipa3_dec_release_wakelock(void) {}
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dmapool.h>
